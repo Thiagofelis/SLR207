@@ -1,0 +1,220 @@
+import java.io.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+class Slave {
+  public static void main(String[] args)
+  {
+    if (args[0].compareTo("0") == 0)
+    {
+      map(args[1], args[1]);
+    }
+    else if (args[0].compareTo("1") == 0)
+    {
+      prepareShuffle(args[1]);
+    }
+    else if (args[0].compareTo("2") == 0)
+    {
+      reduce();
+      sendReducesToMaster();
+    }
+  }
+
+  static void sendReducesToMaster()
+  {
+    try {
+      File dir = new File("/tmp/tcesar/reduces");
+      File[] directoryListing = dir.listFiles();
+
+      if (directoryListing != null)
+      {
+        for (File child : directoryListing)
+        {
+          ProcessBuilder pb = new ProcessBuilder("scp", "/tmp/tcesar/reduces/" + child.getName(),
+            "/cal/homes/tcesar/MesDocuments/SLR205/MapReduce/master/reduces/" + child.getName());
+          Process p = pb.start();
+          p.waitFor(15, TimeUnit.SECONDS);
+        }
+      }
+    } catch (Exception e) {e.printStackTrace(); }
+  }
+
+  static String[] getMachinesArray()
+  {
+    List<String> list = null;
+    try{
+      File file = new File("/tmp/tcesar/machines.txt");
+      BufferedReader br = new BufferedReader(new FileReader(file));
+
+      String str;
+      list = new ArrayList<String>();
+
+      while ((str = br.readLine()) != null)
+      {
+        list.add(str);
+      }
+      br.close();
+    } catch(Exception e) {e.printStackTrace(); }
+    return list.toArray(new String[0]);
+  }
+
+  static void sendFile(String file, String dest)
+  {
+    try {
+      ProcessBuilder pb = new ProcessBuilder("scp", "/tmp/tcesar/shuffles/" + file + ".txt",
+        dest + ":/tmp/tcesar/shufflesreceived/" + file + ".txt");
+      Process p = pb.start();
+      p.waitFor(30, TimeUnit.SECONDS);
+    } catch (Exception e) {e.printStackTrace(); }
+  }
+
+  static int hashFunction(String s)
+  {
+    return (s.hashCode() == Integer.MIN_VALUE) ? 0 : Math.abs(s.hashCode());
+  }
+    /*
+  static void prepareShuffle(String maps)
+  {
+    try{
+
+      Files.lines(Path.get("/tmp/tcesar/maps/" + maps + ".txt"))
+        .parallel()
+        .forEach( stream -> { try
+        {
+          BufferedReader br = new BufferedReader(stream);
+          String str = null;
+          int hash;
+          String[] splited = null;
+          FilrWriter fw = null;
+          while ((str = br.readLine()) != null)
+          {
+            splited = str.split(" ");
+            hash = hashFunction(splited[0]);
+            fw = new FileWriter("/tmp/tcesar/shuffles/" + Integer.toString(hash) + "-" +
+              java.net.InetAddress.getLocalHost().getHostName() + ".txt", true);
+            fw.write(splited[0] + " 1\n");
+            fw.close();
+
+            sendFile(Integer.toString(hash) + "-" +
+              java.net.InetAddress.getLocalHost().getHostName(),
+              machines[hash % machines.length]);
+          }
+          br.close();
+        } catch (Exception e) {e.printStackTrace();} });
+
+    } catch(Exception e) {e.printStackTrace(); }
+  }
+*/
+
+  static void prepareShuffle(String maps)
+  {
+    try{
+      File file = new File("/tmp/tcesar/maps/" + maps + ".txt");
+      BufferedReader br = new BufferedReader(new FileReader(file));
+
+      String str;
+      String[] splited = null;
+      FileWriter fw = null;
+      int hash;
+
+      String[] machines = getMachinesArray();
+
+      while ((str = br.readLine()) != null)
+      {
+        splited = str.split(" ");
+        hash = hashFunction(splited[0]);
+        fw = new FileWriter("/tmp/tcesar/shuffles/" + Integer.toString(hash) + "-" +
+          java.net.InetAddress.getLocalHost().getHostName() + ".txt", true);
+        fw.write(splited[0] + " 1\n");
+        fw.close();
+
+        sendFile(Integer.toString(hash) + "-" +
+          java.net.InetAddress.getLocalHost().getHostName(),
+          machines[hash % machines.length]);
+      }
+      br.close();
+    } catch(Exception e) {e.printStackTrace(); }
+  }
+  static void map(String in, String out)
+  {
+    try {
+      File file = new File("/tmp/tcesar/splits/" + in + ".txt");
+      BufferedReader br = new BufferedReader(new FileReader(file));
+
+      FileWriter fw = new FileWriter("/tmp/tcesar/maps/" + out + ".txt");
+
+      int i;
+      String str;
+      String[] splited = null;
+
+      while ((str = br.readLine()) != null)
+      {
+        splited = str.split(" ");
+
+        // is the line blank?
+        if (splited.length == 0)
+          continue;
+        if (splited[0].compareTo("") == 0)
+          continue;
+
+        for (i = 0; i < splited.length; i++)
+        {
+          fw.write(splited[i] + " 1\n");
+        }
+      }
+      fw.close();
+      br.close();
+    } catch (Exception e) {e.printStackTrace(); }
+  }
+  static void reduce()
+  {
+    try {
+      File dir = new File("/tmp/tcesar/shufflesreceived");
+      File[] directoryListing = dir.listFiles();
+
+      Map<String, Integer> map = new HashMap<String, Integer>();
+
+      BufferedReader br = null;
+
+      String str;
+      String[] splited = null;
+
+      if (directoryListing != null)
+      {
+        for (File child : directoryListing)
+        {
+          br = new BufferedReader(new FileReader(child));
+          while ((str = br.readLine()) != null)
+          {
+            splited = str.split(" ");
+            // is the line blank?
+            if (splited.length == 0)
+              continue;
+            if (splited[0].compareTo("") == 0)
+              continue;
+
+            if (map.get(splited[0]) == null)
+            {
+              map.put(splited[0], 1);
+            }
+            else
+            {
+              map.put(splited[0], map.get(splited[0]) + 1);
+            }
+          }
+          br.close();
+        }
+      }
+
+      FileWriter fw = null;
+
+      for (Map.Entry<String, Integer> entry : map.entrySet())
+      {
+        fw = new FileWriter("/tmp/tcesar/reduces/" + Integer.toString(hashFunction(entry.getKey())) + ".txt");
+        fw.write(entry.getKey() + " " + Integer.toString(entry.getValue()) + "\n");
+        fw.close();
+      }
+
+    } catch (Exception e) {e.printStackTrace(); }
+  }
+}

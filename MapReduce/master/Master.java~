@@ -1,0 +1,217 @@
+import java.io.*;
+import java.util.concurrent.*;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+class Master {
+  static void waitUser(String finished, String next)
+  {
+    System.out.println(finished + " finished");
+    System.out.println("press enter to procced to " + next);
+    try {System.in.read();} catch (Exception e) {e.printStackTrace();}
+  }
+
+  public static void main(String[] args)
+  { // if args[0] == 1 we are in following mode
+    boolean followingMode = (args.length == 1 && args[0].charAt(0) == '1') ? true : false;
+
+    clear();
+    int numValidMachines = getValidMachines(followingMode);
+
+    makeSplits("../../domaine_public_fluvial", numValidMachines);
+
+    if (followingMode) waitUser("split", "deploy");
+
+    runInSlave(new String[]{"bash", "/cal/homes/tcesar/MesDocuments/SLR205/MapReduce/master/init.sh", "#"}, followingMode);
+
+    if (followingMode) waitUser("deploy", "map");
+
+    runInSlave(new String[]{"java", "-jar", "/tmp/tcesar/Slave.jar", "0", "test"}, followingMode);
+
+    if (followingMode) waitUser("map", "shuffle");
+
+    runInSlave(new String[]{"java", "-jar", "/tmp/tcesar/Slave.jar", "1", "test"}, followingMode);
+
+    if (followingMode) waitUser("shuffle", "reduce");
+
+    runInSlave(new String[]{"java", "-jar", "/tmp/tcesar/Slave.jar", "2"}, followingMode);
+
+    if (followingMode) waitUser("reduce", "sort");
+
+    sort();
+  }
+
+  static void clear()
+  {
+    try {
+      ProcessBuilder pb = new ProcessBuilder("bash", "clr.sh");
+      Process p = pb.start();
+      p.waitFor(10, TimeUnit.SECONDS);
+    } catch (Exception e) {e.printStackTrace(); }
+  }
+
+  static void sort()
+  {
+    // defines order on the entries
+    Comparator<Map.Entry<String, Integer>> comp =
+		(Map.Entry<String, Integer> o1, Map.Entry<String, Integer> o2) ->
+    {
+      if (o1.getValue() > o2.getValue())
+        return -1;
+      if (o1.getValue() < o2.getValue())
+        return 1;
+      if (o1.getKey().compareTo(o2.getKey()) < 0)
+        return -1;
+      if (o1.getKey().compareTo(o2.getKey()) > 0)
+        return 1;
+      return 0;
+    };
+
+    TreeSet<Map.Entry<String, Integer>> wordSet = new TreeSet<Map.Entry<String, Integer>>(comp);
+
+    try {
+      File dir = new File("reduces");
+      File[] directoryListing = dir.listFiles();
+      BufferedReader br = null;
+
+      String str;
+      String[] splited = null;
+
+      if (directoryListing != null)
+      {
+        for (File child : directoryListing)
+        {
+          br = new BufferedReader(new FileReader(child));
+          if ((str = br.readLine()) == null)
+          {
+            br.close(); continue;
+          }
+          splited = str.split(" ");
+          wordSet.add(new AbstractMap.SimpleEntry<String, Integer> (splited[0], Integer.parseInt(splited[1])));
+          br.close();
+        }
+      }
+      FileWriter out = new FileWriter("output.txt");
+      wordSet.forEach( (Map.Entry<String, Integer> e) ->
+      {
+        try {out.write(e.getKey() + " " + e.getValue() + "\n"); } catch (Exception ex) {ex.printStackTrace();}
+      });
+      out.close();
+    } catch (Exception e) {e.printStackTrace();}
+  }
+
+  static void makeSplits(String fileName, int numSplits)
+  {
+    try {
+      File file = new File(fileName + ".txt");
+      InputStream is = new FileInputStream(file);
+      FileWriter out = null;
+
+      long avaragePartitionSize = file.length() / numSplits;
+      long lastSplit = 0;
+      long readerCounter = 0;
+
+      int i;
+      int c_in;
+      for (i = 0; i < numSplits; i++)
+      {
+        out = new FileWriter("splits/" + i + ".txt");
+
+        c_in = is.read();
+        readerCounter++;
+        while (c_in != -1 && ( (readerCounter < avaragePartitionSize + lastSplit) ||
+                                (c_in != '\n' && c_in != ' ') ))
+        {
+          out.write((char) c_in);
+          c_in = is.read();
+          readerCounter++;
+        }
+        out.close();
+        lastSplit = readerCounter;
+      }
+      is.close();
+    } catch (Exception e) {e.printStackTrace();}
+  }
+
+  static void runInSlave(String[] command, boolean followingMode)
+  {
+    BufferedReader br = null;
+    AtomicInteger numMachinesFinished = new AtomicInteger(0);
+    List<RunInSlave> slaves = new ArrayList<RunInSlave>();
+
+    int slaveId = 0;
+    String str = null;
+    try
+    {
+      br = new BufferedReader(new FileReader("machines.txt"));
+      while ((str = br.readLine()) != null)
+      {
+        slaves.add(new RunInSlave(str, command, numMachinesFinished, slaveId++, followingMode));
+      }
+      br.close();
+    } catch (Exception e) {e.printStackTrace();}
+
+    slaves.forEach( (slave) -> slave.start() );
+    slaves.forEach( (slave) -> {try {slave.join();} catch (Exception e) {e.printStackTrace();}} );
+
+    if (followingMode) System.out.println(numMachinesFinished + " machines finished with ok");
+  }
+
+  static int getValidMachines(boolean followingMode)
+  {
+    try {
+      FileWriter out = new FileWriter("machines.txt");
+      BufferedReader in = new BufferedReader(new FileReader("existing_machines.txt"));
+      List<ConnexionVerifier[]> myList = new ArrayList<ConnexionVerifier[]>();
+
+      String line = in.readLine();
+      int totalNumMachines = 0;
+      AtomicInteger validMachines = new AtomicInteger(0);
+      while(line != null)
+      {
+	  String[] split = line.split(" ");
+	  if (split[0].equals("#"))
+	  { // room was commented out of the list
+	      line = in.readLine();
+	      continue;
+	  }   
+	       
+	  String room = split[0];
+	  int numMachines = Integer.parseInt(split[1]);
+
+	  ConnexionVerifier array[] = new ConnexionVerifier[numMachines];
+
+	  int i;
+	  for (i = 0; i < numMachines; i++)
+	  {
+	      totalNumMachines++;
+	      if ((i+1) < 10) array[i] = new ConnexionVerifier("tp-" + room + "-0" + (i+1), out, validMachines);
+	      else						array[i] = new ConnexionVerifier("tp-" + room + "-" + (i+1), out, validMachines);
+	      array[i].start();
+	  }
+	  myList.add(array);
+
+	  line = in.readLine();
+      }
+
+      ListIterator<ConnexionVerifier[]> it = myList.listIterator();
+
+      while(it.hasNext())
+      {
+	  int i;
+	  ConnexionVerifier array[] = it.next();
+	  for (i = 0; i < array.length; i++)
+	  {
+	      try { array[i].join(); } catch(Exception e) {}
+	  }
+      }
+      in.close();
+      out.close();
+
+      if (followingMode) System.out.println(validMachines + " of " + totalNumMachines + " machines were validated");
+
+      return validMachines.get();
+    } catch (Exception e) {e.printStackTrace();}
+    return -1;
+  }
+}

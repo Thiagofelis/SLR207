@@ -1,0 +1,1 @@
+;2Â° Un tableau sur trois colonnes dont la premiÃ¨re contiendra la date des inscriptions, la seconde le nom des crÃ©anciers, la troisiÃ¨me le montant des crÃ©ances inscrites ;3Â° La dÃ©claration qu'il est prÃªt Ã  acquitter sur le champ les dettes hypothÃ©caires
