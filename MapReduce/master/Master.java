@@ -19,11 +19,12 @@ class Master {
     int numValidMachines = getValidMachines(followingMode);
     //numValidMachines = numValidMachines > 100 ? 100 : numValidMachines;
     
+    
     makeSplits("../../domaine_public_fluvial", numValidMachines);
 
     if (followingMode) waitUser("split", "deploy");
 
-    runInSlave(new String[]{"bash", "/cal/homes/tcesar/MesDocuments/SLR205/MapReduce/master/init.sh", "#"}, followingMode);
+    runInSlave(new String[]{"bash", "/cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/init.sh", "#", Integer.toString(numValidMachines)}, followingMode);
 
     if (followingMode) waitUser("deploy", "map");
 
@@ -187,7 +188,7 @@ class Master {
 	  {
 	      totalNumMachines++;
 	      if ((i+1) < 10) array[i] = new ConnexionVerifier("tp-" + room + "-0" + (i+1), out, validMachines);
-	      else						array[i] = new ConnexionVerifier("tp-" + room + "-" + (i+1), out, validMachines);
+	      else array[i] = new ConnexionVerifier("tp-" + room + "-" + (i+1), out, validMachines);
 	      array[i].start();
 	  }
 	  myList.add(array);

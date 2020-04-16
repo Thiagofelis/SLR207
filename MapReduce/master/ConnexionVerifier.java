@@ -18,27 +18,39 @@ public class ConnexionVerifier extends Thread
   public void run()
   {
     try {
-      ProcessBuilder pb = new ProcessBuilder("ssh", targetMachine, "hostname");
-      pb.redirectErrorStream(true);
-      Process p = pb.start();
-      p.waitFor(5, TimeUnit.SECONDS);
 
+      String[] command = {"ssh", targetMachine, "hostname"};
+      ProcessBuilder pb = new ProcessBuilder(command);
+      pb.redirectErrorStream(true);
+      long startTime = System.nanoTime();
+      Process p = pb.start();
+      
+      p.waitFor(60, TimeUnit.SECONDS);
+      long endTime = System.nanoTime();
       BufferedReader reader = new BufferedReader (new InputStreamReader (p.getInputStream()));
       if (reader.ready() == false)
       {
+	  synchronized (numValidMachines) {System.out.println(targetMachine + " didnt answer after " + ((endTime - startTime) / 1000000) + " ms");}
         return;
       }
       String outs = reader.readLine();
       if (outs.equals(targetMachine))
       {
-
         numValidMachines.incrementAndGet();
         synchronized(fw)
         {
+	    System.out.println(targetMachine + " validated after " + ((endTime - startTime) / 1000000) + " ms");
           fw.write(targetMachine + '\n');
         }
-
+	return;
       }
+      synchronized (numValidMachines)
+      {
+	  System.out.println(targetMachine + " returned the following error after " + ((endTime - startTime) / 1000000) + " ms:");
+	  System.out.println(outs);
+	  while( (outs = reader.readLine()) != null) System.out.println(outs);
+      }
+      
     } catch (Exception e) { e.printStackTrace(); }
   }
 }

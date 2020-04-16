@@ -11,16 +11,20 @@ class Slave {
     }
     else if (args[0].compareTo("1") == 0)
     {
-      prepareShuffle(args[1]);
+      String[] machines = getMachinesArray();
+      prepareShuffle(args[1], machines);
+      zip();
+      sendZips(machines);
     }
     else if (args[0].compareTo("2") == 0)
     {
+	unzip();
       reduce();
       sendReducesToMaster();
     }
   }
 
-  static void sendReducesToMaster()
+    /*  static void sendReducesToMaster()
   {
     try {
       File dir = new File("/tmp/tcesar/reduces");
@@ -30,13 +34,48 @@ class Slave {
       {
         for (File child : directoryListing)
         {
-          ProcessBuilder pb = new ProcessBuilder("scp", "/tmp/tcesar/reduces/" + child.getName(),
-            "/cal/homes/tcesar/MesDocuments/SLR205/MapReduce/master/reduces/" + child.getName());
+	    ProcessBuilder pb = new ProcessBuilder("bash", "-c", "scp /tmp/tcesar/reduces/" + child.getName()+" /cal/homes/tcesar/MesDocuments/SLR205/MapReduce/master/reduces/" + child.getName() + " ; echo ok");
           Process p = pb.start();
           p.waitFor(15, TimeUnit.SECONDS);
+	  BufferedReader reader = new BufferedReader(new InputStreamReader (p.getInputStream() ));
+	  if (reader.ready() == false)
+	  {
+	      System.out.println ("error sending reduce : buffer not ready");
+	      return;
+	  }
+	  String outs = reader.readLine();
+	  if(!outs.equals("ok"))
+  	  {
+	      System.out.println ("error sending reduce, output buffer below");
+	      System.out.println(outs);
+	      while (reader.ready() && (outs = reader.readLine()) != null)
+		System.out.println(outs);
+	  }
         }
       }
     } catch (Exception e) {e.printStackTrace(); }
+  }
+    */
+    static void sendReducesToMaster()
+  {
+      try{
+	  ProcessBuilder pb = new ProcessBuilder("bash", "/tmp/tcesar/send_reduces.sh");
+	  pb.redirectErrorStream(true);
+	  Process p = pb.start();
+          p.waitFor(90, TimeUnit.SECONDS);
+  	  BufferedReader reader = new BufferedReader(new InputStreamReader (p.getInputStream() ));
+	  if (reader.ready() == false)
+	  {
+	      System.out.println ("error sending reduce : buffer not ready");
+	      return;
+	  }
+	  String outs = reader.readLine();
+	 
+    	  System.out.println(outs);
+	  while (reader.ready() && (outs = reader.readLine()) != null)
+		System.out.println(outs);
+
+      } catch (Exception e) {e.printStackTrace(); }
   }
 
   static String[] getMachinesArray()
@@ -62,7 +101,7 @@ class Slave {
   {
     try {
 	while (true){
-	String[] command = {"bash", "-c", "scp /tmp/tcesar/shuffles/" + file + ".txt " + dest + ":/tmp/tcesar/shufflesreceived/" + file + ".txt ; echo ok"};
+	String[] command = {"bash", "-c", "scp /tmp/tcesar/shuffles/" + file + " " + dest + ":/tmp/tcesar/shufflesreceived/" + file + " ; echo ok"};
 	//String[] command = {"scp", "/tmp/tcesar/shuffles/" + file + ".txt", dest + ":/tmp/tcesar/shufflesreceived/" + file + ".txt;", "echo", "ok"};
 	ProcessBuilder pb = new ProcessBuilder(command);
 	pb.redirectErrorStream(true);
@@ -127,8 +166,69 @@ class Slave {
     } catch(Exception e) {e.printStackTrace(); }
   }
 */
+    static void zip()
+    {
+	try{
+	    ProcessBuilder pb = new ProcessBuilder("bash", "/tmp/tcesar/shuffles/zip.sh", java.net.InetAddress.getLocalHost().getHostName());
+	    
+	    pb.redirectErrorStream(true);
+	    Process p = pb.start();
+	    p.waitFor(20, TimeUnit.SECONDS);
+	    BufferedReader reader = new BufferedReader (new InputStreamReader (p.getInputStream() ));
+	    if (reader.ready() == false)
+	    {
+		System.out.println("error during zipping");
+	    }
+	    String outs = reader.readLine();
+	    if (!outs.equals("ok"))
+	    {
+		System.out.println("error during zipping");
+	    }
+	}catch (Exception e) { e.printStackTrace();}
+    }
+     static void unzip()
+    {
+	try{
+	    ProcessBuilder pb = new ProcessBuilder("bash", "/tmp/tcesar/shufflesreceived/unzip.sh");
+	    
+	    pb.redirectErrorStream(true);
+	    Process p = pb.start();
+	    p.waitFor(20, TimeUnit.SECONDS);
+	    BufferedReader reader = new BufferedReader (new InputStreamReader (p.getInputStream() ));
+	    if (reader.ready() == false)
+	    {
+		System.out.println("error during unzipping - 1");
+	    }
+	    String outs = reader.readLine();
+	    if (!outs.equals("ok"))
+	    {
+		System.out.println("error during unzipping - 2:");
+		System.out.println(outs);
+		while ((outs = reader.readLine()) != null) System.out.println(outs);
+	    }
+	}catch (Exception e) { e.printStackTrace();}
+    }
 
-  static void prepareShuffle(String maps)
+    static void sendZips(String[] machines)
+    {
+	try {
+	    File dir = new File("/tmp/tcesar/shuffles");
+	    File[] files = dir.listFiles();
+	    String machineID;
+	    for (File child : files)
+	    {
+		if (child.getName().equals("zip.sh"))
+		    continue;
+		if (child.isFile())
+		    {
+			machineID = child.getName().split("@")[0];
+			sendFile(child.getName(), machines[Integer.parseInt(machineID)]);
+		    }
+	    }
+	} catch (Exception e) {e.printStackTrace();}
+    }
+    
+    static void prepareShuffle(String maps, String[] machines)
   {
     try{
       File file = new File("/tmp/tcesar/maps/" + maps + ".txt");
@@ -139,20 +239,15 @@ class Slave {
       FileWriter fw = null;
       int hash;
 
-      String[] machines = getMachinesArray();
-
       while ((str = br.readLine()) != null)
       {
         splited = str.split(" ");
         hash = hashFunction(splited[0]);
-        fw = new FileWriter("/tmp/tcesar/shuffles/" + Integer.toString(hash) + "-" +
-          java.net.InetAddress.getLocalHost().getHostName() + ".txt", true);
+        fw = new FileWriter("/tmp/tcesar/shuffles/" + Integer.toString(hash % machines.length) + "/" + Integer.toString(hash) + "-" + java.net.InetAddress.getLocalHost().getHostName() + ".txt", true);
         fw.write(splited[0] + " 1\n");
         fw.close();
 
-        sendFile(Integer.toString(hash) + "-" +
-          java.net.InetAddress.getLocalHost().getHostName(),
-          machines[hash % machines.length]);
+	//        sendFile(Integer.toString(hash) + "-" + java.net.InetAddress.getLocalHost().getHostName(), machines[hash % machines.length]);
       }
       br.close();
     } catch(Exception e) {e.printStackTrace(); }
@@ -191,7 +286,7 @@ class Slave {
   static void reduce()
   {
     try {
-      File dir = new File("/tmp/tcesar/shufflesreceived");
+      File dir = new File("/tmp/tcesar/shufflesreceived/files");
       File[] directoryListing = dir.listFiles();
 
       Map<String, Integer> map = new HashMap<String, Integer>();

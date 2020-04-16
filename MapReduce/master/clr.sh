@@ -1,6 +1,6 @@
 set -e
 
-cd /cal/homes/tcesar/MesDocuments/SLR205/MapReduce/master/splits
+cd /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/splits
 rm -f *
-cd /cal/homes/tcesar/MesDocuments/SLR205/MapReduce/master/reduces
+cd /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/reduces
 rm -f *
