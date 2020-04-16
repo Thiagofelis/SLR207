@@ -96,7 +96,7 @@ class Master {
       FileWriter out = new FileWriter("output.txt");
       wordSet.forEach( (Map.Entry<String, Integer> e) ->
       {
-        try {out.write(e.getKey() + " " + e.getValue() + "\n"); } catch (Exception ex) {ex.printStackTrace();}
+        try {out.write(e.getValue() + " " + e.getKey() + "\n"); } catch (Exception ex) {ex.printStackTrace();}
       });
       out.close();
     } catch (Exception e) {e.printStackTrace();}
@@ -186,6 +186,10 @@ class Master {
 	  int i;
 	  for (i = 0; i < numMachines; i++)
 	  {
+	      if (room.equals("1a201") && i == 14)
+		  // skip the Master
+		  continue;
+		  
 	      totalNumMachines++;
 	      if ((i+1) < 10) array[i] = new ConnexionVerifier("tp-" + room + "-0" + (i+1), out, validMachines);
 	      else array[i] = new ConnexionVerifier("tp-" + room + "-" + (i+1), out, validMachines);

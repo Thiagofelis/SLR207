@@ -30,34 +30,4 @@ Table
 Table des matiÃ¨res
 
 
-Livre II : Des bateaux Titre Ier : RÃ©gime juridique des bateaux de navigation intÃ©rieure Chapitre Ier : Immatriculation
-
-Chapitre II : PrivilÃ¨ges et hypothÃ¨ques sur bateaux
-
-Chapitre III : De la publicitÃ© des actes translatifs, constitutifs ou dÃ©claratifs de droits rÃ©els sur les bateaux de navigation intÃ©rieure
-
-Chapitre IV : De la purge des hypothÃ¨ques
-
-Chapitre V : De la saisie et de la vente forcÃ©e
-
-
-
-
-
-Livre III : Des mariniers Titre Ier : Des patrons bateliers
-
-Titre II : Des compagnons bateliers
-
-
-
-
-
-Livre IV : Voies navigables de France
-
-Livre V : De l'exploitation et de la modernisation des voies navigables Titre IV : Exploitation commerciale des voies navigables Chapitre III : Contrats de transports
-
-
-
-
-
-Livre VI : Dispositions particuliÃ¨res Titre Ier : Dispositions particuliÃ¨res
+Livre II : Des bateaux Titre Ier : RÃ©gime

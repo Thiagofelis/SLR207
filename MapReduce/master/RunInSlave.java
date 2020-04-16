@@ -43,41 +43,56 @@ public class RunInSlave extends Thread
           ssh.set(j, Integer.toString(slaveId));
         }
       }
+      int tryNum = 1;
+      while (true)
+      {
+	  // start remote process
+	  long startTime = System.nanoTime();
+	  ProcessBuilder pb = new ProcessBuilder(ssh.toArray(new String[0]));
+	  pb.redirectErrorStream(true);
+	  Process p = pb.start();
+	  p.waitFor(180, TimeUnit.SECONDS);
+	  long endTime = System.nanoTime();
 
-      // start remote process
-      long startTime = System.nanoTime();
-      ProcessBuilder pb = new ProcessBuilder(ssh.toArray(new String[0]));
-      pb.redirectErrorStream(true);
-      Process p = pb.start();
-      p.waitFor(90, TimeUnit.SECONDS);
-      long endTime = System.nanoTime();
+	  BufferedReader reader = new BufferedReader (new InputStreamReader (p.getInputStream()));
+	  // is buffer is not ready, we suppose that the command didn't have time to finish
+	  if (reader.ready() == false)
+	  {
+	      if (followingMode) synchronized (numMachinesFinished) {System.out.println("name: " + targetMachine + " - id = " + slaveId + " failed after " + ((endTime - startTime) / 1000000) + " ms (command didn't finished)");}
+	      return;
+	  }
+	  String outs = reader.readLine();
+	  // if in buffer we read 'ok' on the first line, then everything went well
+	  if (outs.equals("ok"))
+	  {
+	      if (followingMode) synchronized (numMachinesFinished) {
+		      System.out.println("name: " + targetMachine + " - id = " + slaveId + " finished in " + ((endTime - startTime) / 1000000) + " ms");
+	      }
+	      numMachinesFinished.incrementAndGet();
+	  }
+	  else
+          {
+	      // if buffer contains anything else, something went unexpectedly
 
-      BufferedReader reader = new BufferedReader (new InputStreamReader (p.getInputStream()));
-      // is buffer is not ready, we suppose that the command didn't have time to finish
-      if (reader.ready() == false)
-      {
-        if (followingMode) synchronized (numMachinesFinished) {System.out.println("name: " + targetMachine + " - id = " + slaveId +
-          " failed after " + ((endTime - startTime) / 1000000) + " ms (command didn't finished)");}
-        return;
-      }
-      String outs = reader.readLine();
-      // if in buffer we read 'ok' on the first line, then everything went well
-      if (outs.equals("ok"))
-      {
-        if (followingMode) synchronized (numMachinesFinished) {
-		System.out.println("name: " + targetMachine + " - id = " + slaveId + " finished in " + ((endTime - startTime) / 1000000) + " ms");}
-	numMachinesFinished.incrementAndGet();
-      }
-      else
-      {
-        // if buffer contains anything else, something went unexpectedly
-        if (followingMode)  synchronized (numMachinesFinished)
-        {
-          System.out.println("name: " + targetMachine + " - id = " + slaveId + " failed after " + ((endTime - startTime) / 1000000) + " ms - command returned:");
-          System.out.println(outs);
-          while (reader.ready() && (outs = reader.readLine()) != null)
-            System.out.println(outs);
-        }
+	      String[] splitted = outs.split(":");
+	      if (splitted[0].equals("ssh_exchange_identification") && tryNum < 3)
+        	{ // sometimes this happens, lets give it another try
+		    synchronized (numMachinesFinished)
+                    {
+			System.out.println(targetMachine + " closed its connexion in try " + tryNum + ", trying another time");
+		    }
+		    tryNum++;
+		    continue;
+		}
+	      if (followingMode)  synchronized (numMachinesFinished)
+	      {
+		  System.out.println("name: " + targetMachine + " - id = " + slaveId + " failed after " + ((endTime - startTime) / 1000000) + " ms - command returned:");
+		  System.out.println(outs);
+		  while (reader.ready() && (outs = reader.readLine()) != null)
+		      System.out.println(outs);
+	      }
+	  }
+	  return;
       }
     } catch (Exception e) { e.printStackTrace();}
   }
