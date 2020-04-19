@@ -6,94 +6,104 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class RunInSlave extends Thread
 {
-  int slaveId;
-  String[] command;
-  String targetMachine;
-  AtomicInteger numMachinesFinished;
-  boolean followingMode;
-  public RunInSlave(String tm, String[] cmd, AtomicInteger _numMachinesFinished, int _slaveId, boolean _followingMode)
-  {
-    followingMode = _followingMode;
-    slaveId = _slaveId;
-    targetMachine = tm;
-    command = cmd;
-    numMachinesFinished = _numMachinesFinished;
-  }
-  public void run()
-  { // everytime we print in System.out we sync it with a shared object in order to prevent
-    // the outputs from different threads from mixing together
-    try {
+	int slaveId;
+	String[] command;
+	String targetMachine;
+	AtomicInteger numMachinesFinished;
+	boolean followingMode;
+	int timeOut;
+	public RunInSlave(String tm, String[] cmd, AtomicInteger _numMachinesFinished, int _slaveId, boolean _followingMode, int _timeOut)
+	{
+		timeOut = _timeOut;
+		followingMode = _followingMode;
+		slaveId = _slaveId;
+		targetMachine = tm;
+		command = cmd;
+		numMachinesFinished = _numMachinesFinished;
+	}
+	public void run()
+	{ // everytime we print in System.out we sync it with a shared object in order to prevent the outputs from different threads from mixing together
+		try {
+	    // takes command, places it after ssh and adds an 'echo ok' at the end to signal that everything worked properly
+	    ArrayList<String> ssh = new ArrayList<String>(Arrays.asList(new String[]{"ssh", targetMachine}));
+	    ArrayList<String> cmd = new ArrayList<String>(Arrays.asList(command));
+	    ssh.addAll(cmd);
+	    ssh.add("&&"); ssh.add("echo"); ssh.add("ok");
 
-      // takes command, places it after ssh and adds an 'echo ok' at the end
-      // to signal that everything worked properly
-      ArrayList<String> ssh = new ArrayList<String>(Arrays.asList(new String[]{"ssh", targetMachine}));
-      ArrayList<String> cmd = new ArrayList<String>(Arrays.asList(command));
-      ssh.addAll(cmd);
-      ssh.add("&&"); ssh.add("echo"); ssh.add("ok");
-
-
-      // some commands may be machine-dependent. in this case, the command given to
-      // RunInSlave will have a '#' somewhere, which must be replaced by the
-      // id given to the machine
-      int j;
-      for (j = 0; j < ssh.size(); j++)
-      {
-        if (ssh.get(j).compareTo("#") == 0)
-        {
-          ssh.set(j, Integer.toString(slaveId));
-        }
-      }
-      int tryNum = 1;
-      while (true)
-      {
-	  // start remote process
-	  long startTime = System.nanoTime();
-	  ProcessBuilder pb = new ProcessBuilder(ssh.toArray(new String[0]));
-	  pb.redirectErrorStream(true);
-	  Process p = pb.start();
-	  p.waitFor(180, TimeUnit.SECONDS);
-	  long endTime = System.nanoTime();
-
-	  BufferedReader reader = new BufferedReader (new InputStreamReader (p.getInputStream()));
-	  // is buffer is not ready, we suppose that the command didn't have time to finish
-	  if (reader.ready() == false)
-	  {
-	      if (followingMode) synchronized (numMachinesFinished) {System.out.println("name: " + targetMachine + " - id = " + slaveId + " failed after " + ((endTime - startTime) / 1000000) + " ms (command didn't finished)");}
-	      return;
-	  }
-	  String outs = reader.readLine();
-	  // if in buffer we read 'ok' on the first line, then everything went well
-	  if (outs.equals("ok"))
-	  {
-	      if (followingMode) synchronized (numMachinesFinished) {
-		      System.out.println("name: " + targetMachine + " - id = " + slaveId + " finished in " + ((endTime - startTime) / 1000000) + " ms");
-	      }
-	      numMachinesFinished.incrementAndGet();
-	  }
-	  else
-          {
-	      // if buffer contains anything else, something went unexpectedly
-
-	      String[] splitted = outs.split(":");
-	      if (splitted[0].equals("ssh_exchange_identification") && tryNum < 3)
-        	{ // sometimes this happens, lets give it another try
-		    synchronized (numMachinesFinished)
-                    {
-			System.out.println(targetMachine + " closed its connexion in try " + tryNum + ", trying another time");
+	    // some commands may be machine-dependent. in this case, the command given to RunInSlave will have a '#' somewhere, which must be replaced by the id given to the machine
+	    int j;
+	    for (j = 0; j < ssh.size(); j++){
+				if (ssh.get(j).compareTo("#") == 0)
+		    {
+					ssh.set(j, Integer.toString(slaveId));
 		    }
-		    tryNum++;
-		    continue;
-		}
-	      if (followingMode)  synchronized (numMachinesFinished)
-	      {
-		  System.out.println("name: " + targetMachine + " - id = " + slaveId + " failed after " + ((endTime - startTime) / 1000000) + " ms - command returned:");
-		  System.out.println(outs);
-		  while (reader.ready() && (outs = reader.readLine()) != null)
-		      System.out.println(outs);
-	      }
-	  }
-	  return;
-      }
-    } catch (Exception e) { e.printStackTrace();}
-  }
+	    }
+
+			// some machines instantly refuse the ssh, it suffices to try another time
+	    int tryNum = 1;
+			int maxNumTries = 3;
+			while (true)
+			{
+		    // start remote process
+		    long startTime = System.nanoTime();
+		    ProcessBuilder pb = new ProcessBuilder(ssh.toArray(new String[0]));
+		    pb.redirectErrorStream(true);
+		    Process p = pb.start();
+		    p.waitFor(timeOut, TimeUnit.SECONDS);
+		    long endTime = System.nanoTime();
+
+		    BufferedReader reader = new BufferedReader (new InputStreamReader (p.getInputStream()));
+		    // is buffer is not ready, we suppose that the command didn't have time to finish
+		    if (reader.ready() == false)
+				{
+			    if (followingMode)
+						synchronized (numMachinesFinished)
+						{
+							System.out.println("name: " + targetMachine + " - id = " + slaveId + " failed after " + ((endTime - startTime) / 1000000) + " ms (command didn't finished)");
+						}
+			    return;
+				}
+		    String outs = reader.readLine();
+		    // if in buffer we read 'ok' on the first line, then everything went well
+		    if (outs.equals("ok"))
+				{
+			    if (followingMode)
+						synchronized (numMachinesFinished)
+						{
+							System.out.println("name: " + targetMachine + " - id = " + slaveId + " finished in " + ((endTime - startTime) / 1000000) + " ms");
+						}
+			    numMachinesFinished.incrementAndGet();
+					return;
+				}
+		    else
+				{
+			    // if buffer contains anything else, something went unexpectedly
+			    String[] splitted = outs.split(":");
+			    if (splitted[0].equals("ssh_exchange_identification") && tryNum < maxNumTries)
+					{ // the machine closed its connexion, sometimes this happens, lets give it another try
+				    if (followingMode)
+							synchronized (numMachinesFinished)
+							{
+								System.out.println(targetMachine + " closed its connexion in try " + tryNum + ", trying another time");
+							}
+				    tryNum++;
+						continue;
+					}
+					else
+					{ // there was another error, we give up the machine
+						if (followingMode)
+							synchronized (numMachinesFinished)
+							{
+								System.out.println("name: " + targetMachine + " - id = " + slaveId + " failed after " + ((endTime - startTime) / 1000000) + " ms - command returned:");
+								System.out.println(outs);
+								while (reader.ready() && (outs = reader.readLine()) != null)
+									System.out.println(outs);
+							}
+						return;
+					}
+				}
+
+			}
+		} catch (Exception e) { e.printStackTrace();}
+	}
 }

@@ -13,10 +13,10 @@ for i in $(seq 0 $range)
 do
     mkdir shuffles/$i
 done
-scp /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/zip.sh /tmp/tcesar/shuffles/zip.sh
-scp /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/unzip.sh /tmp/tcesar/shufflesreceived/unzip.sh
+scp /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/scripts/zip.sh /tmp/tcesar/shuffles/zip.sh
+scp /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/scripts/unzip.sh /tmp/tcesar/shufflesreceived/unzip.sh
 scp /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/machines.txt /tmp/tcesar/machines.txt
 scp /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/slave/Slave.jar /tmp/tcesar/Slave.jar
-scp /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/send_reduces.sh /tmp/tcesar/send_reduces.sh
+scp /cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/scripts/send_reduces.sh /tmp/tcesar/send_reduces.sh
 num="/cal/homes/tcesar/MesDocuments/SLR207/MapReduce/master/splits/$1.txt"
 scp $num /tmp/tcesar/splits/test.txt
